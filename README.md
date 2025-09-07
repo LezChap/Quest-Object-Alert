@@ -9,6 +9,8 @@ The size, color, transparency, and duration of the flare can be configured, as w
 Open the config window with /qoaconfig.
 
 Known Issue:
+
 -If the quest objective is different from the in-world object name, this addon will not work.
+
 Example:  Quest asks you to gather 5 "Bundles of Flowers", but the objects in the world are called "Flower Bushes", you will not see a flare or hear a sound.  
 I could fix this in the future, but it'll require a database of all quests with discrepencies like these, and it's more work than I can put in for an initial release (and without a released server databsae).
