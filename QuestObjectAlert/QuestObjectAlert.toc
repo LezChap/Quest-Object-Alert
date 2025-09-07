@@ -1,0 +1,10 @@
+## Interface: 30300
+## Title: Quest Object Alert
+## Notes: Plays a ding sound and flashes a flare on your screen when you mouse over quest objects.
+## Version: 1.0
+## Author: LezChap
+## SavedVariables: QOAConfig
+
+
+QuestObjectAlert.lua
+QuestObjectAlert_Config.lua
