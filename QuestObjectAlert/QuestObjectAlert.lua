@@ -1,3 +1,16 @@
+local addonName, QOA = ...
+QOA = QOA or {}
+
+local function SanitizeFloat(value, default, min, max, precision)
+    value = tonumber(value) or default
+    value = math.max(min, math.min(max, value))
+    if precision then
+        local factor = 10 ^ precision
+        value = math.floor(value * factor + 0.5) / factor
+    end
+    return value
+end
+
 local QOAFrame = CreateFrame("Frame")
 
 -- Store quest objective text
@@ -41,7 +54,7 @@ local function TooltipMatchesQuestObjective()
 end
 
 -- Create pulse effect
-local function ShowPulseAtCursor()
+local function ShowPulseAtCursor(x, y)
     local now = GetTime()
     local cooldown = QOAConfig and QOAConfig.cooldown or 0.6
 
@@ -51,7 +64,9 @@ local function ShowPulseAtCursor()
     lastPulseTime = now
 
     local scale = UIParent:GetEffectiveScale()
-    local x, y = GetCursorPosition()
+	if not x and not y then
+		x, y = GetCursorPosition()
+	end
     x = x / scale
     y = y / scale
 
@@ -91,29 +106,51 @@ local function ShowPulseAtCursor()
     end)
 end
 
+function QOA.doAlert(testx, testy)
+	if QOAConfig and QOAConfig.playSound and QOAConfig.sound then
+		if QOAConfig.sound ~= "" then
+			PlaySoundFile(QOAConfig.sound or "Interface\\AddOns\\QuestObjectAlert\\Resources\\ding.mp3")
+		end
+	end
+	if GetTime() - lastPulseTime >= (QOAConfig and QOAConfig.cooldown or 0.6) then
+		ShowPulseAtCursor(testx, testy)
+	end
+end
+
+SLASH_QOATEST1 = "/qoatest"
+SlashCmdList["QOATEST"] = function()
+	QOA.doAlert()
+end
+
 -- Main trigger
 GameTooltip:HookScript("OnShow", function()
 	local owner = GameTooltip:GetOwner()
 
     if owner and owner:GetName() == "UIParent" and TooltipMatchesQuestObjective() then
-		if QOAConfig and QOAConfig.playSound and QOAConfig.sound then
-			if QOAConfig.sound ~= "" then
-				PlaySoundFile(QOAConfig.sound or "Interface\\AddOns\\QuestObjectAlert\\Resources\\ding.mp3")
-			end
-		end
-		if GetTime() - lastPulseTime >= (QOAConfig and QOAConfig.cooldown or 0.6) then
-            ShowPulseAtCursor()
-        end
+		QOA.doAlert()
     end
 end)
 
 -- Watch for quest updates
 QOAFrame:RegisterEvent("QUEST_LOG_UPDATE")
 QOAFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+QOAFrame:RegisterEvent("ADDON_LOADED")
 QOAFrame:SetScript("OnEvent", function(self, event, ...)
 	if event == "QUEST_LOG_UPDATE" then
 		UpdateQuestObjectives()
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		UpdateQuestObjectives()
+	elseif event == "ADDON_LOADED" then
+		local addon = ...
+		if addon == "QuestObjectAlert" then			
+			QOAConfig = QOAConfig or {}
+
+			QOAConfig.playSound = (QOAConfig.playSound == nil) and true or QOAConfig.playSound
+			QOAConfig.sound = QOAConfig.sound or "Interface\\AddOns\\QuestObjectAlert\\Resources\\ding.mp3"
+			QOAConfig.cooldown = SanitizeFloat(QOAConfig.cooldown, 0.6, 0.1, 5.0, 2)
+			QOAConfig.duration = SanitizeFloat(QOAConfig.duration, 0.6, 0.1, 2.0, 2)
+			QOAConfig.color = QOAConfig.color or { r = 1, g = 1, b = 1, a = 1 }
+			QOAConfig.size = SanitizeFloat(QOAConfig.size, 1.0, 0.25, 4.0, 2)
+		end
     end
 end)

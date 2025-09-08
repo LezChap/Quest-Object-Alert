@@ -1,4 +1,8 @@
-SLASH_QOAConfig1 = "/qoaconfig"
+local _, QOA = ...
+
+local originalConfig = nil
+
+SLASH_QOAConfig1 = "/QOAConfig"
 
 local function SanitizeFloat(value, default, min, max, precision)
     value = tonumber(value) or default
@@ -10,14 +14,36 @@ local function SanitizeFloat(value, default, min, max, precision)
     return value
 end
 
+local function copyTable(t)
+    if type(t) ~= "table" then return t end
+    local copy = {}
+    for k, v in pairs(t) do
+        if type(v) == "table" then
+            copy[k] = copyTable(v)
+        else
+            copy[k] = v
+        end
+    end
+    return copy
+end
+
 local function CreateConfigFrame()
+	for _, f in ipairs({EnumerateFrames()}) do
+		if f:GetObjectType() == "EditBox" and not f:GetParent() then
+			f:Hide()
+		end
+	end
+	
     if QOAConfigFrame then
         QOAConfigFrame:Show()
         return
     end
 
     local frame = CreateFrame("Frame", "QOAConfigFrame", UIParent, "UIPanelDialogTemplate")
-    frame:SetSize(600, 400)
+	
+	originalConfig = copyTable(QOAConfig)
+
+    frame:SetSize(650, 400)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -33,33 +59,24 @@ local function CreateConfigFrame()
     frame.title:SetPoint("TOP", 0, -5)
     frame.title:SetText("Quest Object Alert Config")
 
-    -- Load defaults
-    QOAConfig = QOAConfig or {}
-	QOAConfig.playSound = (QOAConfig.playSound == nil) and true or QOAConfig.playSound
-    QOAConfig.sound = QOAConfig.sound or "Interface\\AddOns\\QuestObjectAlert\\Resources\\ding.mp3"
-    QOAConfig.cooldown = SanitizeFloat(QOAConfig.cooldown, 0.6, 0.1, 5.0, 2)
-    QOAConfig.duration = SanitizeFloat(QOAConfig.duration, 0.6, 0.1, 2.0, 2)
-    QOAConfig.color = QOAConfig.color or { r = 1, g = 1, b = 1, a = 1 }
-	QOAConfig.size = SanitizeFloat(QOAConfig.size, 1.0, 0.25, 4.0, 2)
-
 	-- SOUND ENABLE CHECKBOX + INPUT
 	QOAConfig.playSound = (QOAConfig.playSound == nil) and true or QOAConfig.playSound
 	
 	-- Create container frame to center both elements together
-	local soundContainer = CreateFrame("Frame", nil, frame)
-	soundContainer:SetSize(520, 20) -- Wide enough to hold checkbox + edit box
+	local soundContainer = CreateFrame("Frame", "soundFrameContainer", frame)
+	soundContainer:SetSize(650, 20) -- Wide enough to hold checkbox + edit box
 	soundContainer:SetPoint("TOP", frame, "TOP", 0, -50)
 	
 	-- Checkbox
-	local playSoundCB = CreateFrame("CheckButton", nil, soundContainer, "UICheckButtonTemplate")
-	playSoundCB:SetPoint("LEFT", soundContainer, "LEFT", 0, 0)
+	local playSoundCB = CreateFrame("CheckButton", "soundCheckboxFrame", soundContainer, "UICheckButtonTemplate")
+	playSoundCB:SetPoint("LEFT", soundContainer, "LEFT", 10, 0)
 	playSoundCB:SetChecked(QOAConfig.playSound)
 	playSoundCB.text = playSoundCB:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	playSoundCB.text:SetPoint("LEFT", playSoundCB, "RIGHT", 2, 0)
 	playSoundCB.text:SetText("Play Sound")
 	
     -- SOUND TEXT INPUT
-    local soundEdit = CreateFrame("EditBox", nil, soundContainer, "InputBoxTemplate")
+    local soundEdit = CreateFrame("EditBox", "soundFileFrame", soundContainer, "InputBoxTemplate")
     soundEdit:SetSize(500, 20)
     soundEdit:SetPoint("LEFT", playSoundCB.text, "RIGHT", 10, 0)
     soundEdit:SetAutoFocus(false)
@@ -71,9 +88,12 @@ local function CreateConfigFrame()
 		soundEdit:SetTextColor(0.5, 0.5, 0.5)  -- gray
 	end
 	soundEdit:SetAlpha(QOAConfig.playSound and 1 or 0.5)
+    soundEdit:SetScript("OnTextChanged", function(self)
+        QOAConfig.sound = self:GetText()
+    end)
 
 	local soundLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	soundLabel:SetPoint("BOTTOMLEFT", soundContainer, "TOPLEFT", 0, 5)
+	soundLabel:SetPoint("CENTER", soundContainer, "TOP", 0, 5)
 	soundLabel:SetText("Sound File Path")
 	
 	-- Checkbox logic
@@ -88,6 +108,7 @@ local function CreateConfigFrame()
 			soundEdit:ClearFocus()
 			soundEdit:SetTextColor(0.5, 0.5, 0.5)
 		end
+		soundEdit:SetAlpha(enabled and 1 or 0.5)
 	end)
 
     -- COOLDOWN SLIDER
@@ -100,6 +121,8 @@ local function CreateConfigFrame()
     cooldownSlider.text = _G[cooldownSlider:GetName().."Text"]
     cooldownSlider.text:SetText("Cooldown: " .. QOAConfig.cooldown)
     cooldownSlider:SetScript("OnValueChanged", function(self, value)
+        value = SanitizeFloat(value, QOAConfig.cooldown, 0.1, 5.0, 1)
+        QOAConfig.cooldown = value
         self.text:SetText("Cooldown: " .. string.format("%.1f", value))
     end)
 
@@ -113,11 +136,13 @@ local function CreateConfigFrame()
     durationSlider.text = _G[durationSlider:GetName().."Text"]
     durationSlider.text:SetText("Pulse Duration: " .. QOAConfig.duration)
     durationSlider:SetScript("OnValueChanged", function(self, value)
+	    value = SanitizeFloat(value, QOAConfig.duration, 0.1, 2.0, 1)
+        QOAConfig.duration = value
         self.text:SetText("Pulse Duration: " .. string.format("%.1f", value))
     end)
 
     -- COLOR PICKER BUTTON
-    local colorButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    local colorButton = CreateFrame("Button", "ColorButtonFrame", frame, "UIPanelButtonTemplate")
     colorButton:SetSize(120, 24)
     colorButton:SetPoint("TOP", durationSlider, "BOTTOM", 0, -30)
     colorButton:SetText("Set Pulse Color")
@@ -153,32 +178,69 @@ local function CreateConfigFrame()
 	sizeSlider.text = _G[sizeSlider:GetName().."Text"]
 	sizeSlider.text:SetText("Pulse Size: " .. string.format("%.2fx", QOAConfig.size))
 	sizeSlider:SetScript("OnValueChanged", function(self, value)
+	    value = SanitizeFloat(value, QOAConfig.size, 0.25, 4.0, 2)
+        QOAConfig.size = value
 		self.text:SetText("Pulse Size: " .. string.format("%.2fx", value))
 	end)
-	
+
     -- SAVE BUTTON
-    local save = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    local save = CreateFrame("Button", "saveButtonFrame", frame, "UIPanelButtonTemplate")
     save:SetSize(100, 24)
     save:SetPoint("BOTTOM", frame, "BOTTOM", 0, 20)
     save:SetText("Save & Close")
     save:SetScript("OnClick", function()
-		QOAConfig.playSound = playSoundCB:GetChecked()
-        QOAConfig.sound = soundEdit:GetText()
-        QOAConfig.cooldown = cooldownSlider:GetValue()
-        QOAConfig.duration = durationSlider:GetValue()
-		QOAConfig.size = sizeSlider:GetValue()
-		
         frame:Hide()
+		originalConfig = nil 
     end)
 	
+	-- TEST BUTTON
+	local test = CreateFrame("Button", "testButtonFrame", frame, "UIPanelButtonTemplate")
+	test:SetSize(80, 24)
+	test:SetPoint("RIGHT", save, "LEFT", -10, 0)
+	test:SetText("Test")
+	test:SetScript("OnClick", function()
+		if QOA and QOA.doAlert then
+			local x, y = GetCursorPosition()
+			QOA.doAlert(x-50, y-50)
+		else
+			print("QuestObjectAlert ERROR: QOA.doAlert() is not available.")
+		end				
+	end)
+	
+	local function RestoreConfigToUI()
+        playSoundCB:SetChecked(QOAConfig.playSound)
+        soundEdit:SetText(QOAConfig.sound or "")
+        soundEdit:EnableMouse(QOAConfig.playSound)
+        soundEdit:SetTextColor(QOAConfig.playSound and 1 or 0.5, QOAConfig.playSound and 1 or 0.5, QOAConfig.playSound and 1 or 0.5)
+        soundEdit:SetAlpha(QOAConfig.playSound and 1 or 0.5)
+
+        cooldownSlider:SetValue(QOAConfig.cooldown)
+        cooldownSlider.text:SetText("Cooldown: " .. string.format("%.1f", QOAConfig.cooldown))
+
+        durationSlider:SetValue(QOAConfig.duration)
+        durationSlider.text:SetText("Pulse Duration: " .. string.format("%.1f", QOAConfig.duration))
+
+        sizeSlider:SetValue(QOAConfig.size)
+        sizeSlider.text:SetText("Pulse Size: " .. string.format("%.2fx", QOAConfig.size))
+    end
+		
 	-- CANCEL BUTTON
-	local cancel = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+	local cancel = CreateFrame("Button", "cancelButtonFrame", frame, "UIPanelButtonTemplate")
 	cancel:SetSize(80, 24)
 	cancel:SetPoint("LEFT", save, "RIGHT", 10, 0)
 	cancel:SetText("Cancel")
 	cancel:SetScript("OnClick", function()
+	    if originalConfig then
+            QOAConfig = {}
+			QOAConfig = copyTable(originalConfig)
+            RestoreConfigToUI()
+        end
 		frame:Hide()
 	end)
+	
+	-- At the end, initialize UI controls from current config
+    RestoreConfigToUI()
+	
 end
 
-SlashCmdList["QOACONFIG"] = CreateConfigFrame
+SlashCmdList["QOAConfig"] = CreateConfigFrame
